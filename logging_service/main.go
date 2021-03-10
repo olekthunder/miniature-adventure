@@ -49,7 +49,6 @@ func main() {
 	logRouter.Path("/add").HandlerFunc(addLog).Methods(http.MethodPost)
 	logRouter.Path("/list").HandlerFunc(listLogs).Methods(http.MethodGet)
 
-
 	srv := &http.Server{
 		Handler:      router,
 		Addr:         "0.0.0.0:8082",
