@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"net/http"
 	"time"
@@ -9,6 +10,9 @@ import (
 	"github.com/gorilla/mux"
 	log "github.com/sirupsen/logrus"
 )
+
+// I don't want to parse configs for now
+const LOGGING_SERVICE_ENDPOINT = "http://localhost:8082/log/add"
 
 type addMessageRequest struct {
 	Message string
@@ -27,13 +31,43 @@ func addMessage(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(addMessageResponse{Error: "No message"})
 		return
 	}
-	u := uuid.New()
+	u := uuid.New().String()
 	log.WithFields(log.Fields{
 		"msg":  request.Message,
 		"uuid": u,
 	}).Debug("Got message")
 
+	// Don't wait for response
+	go sendLog(u, request.Message)
+
 	w.WriteHeader(http.StatusOK)
+}
+
+type logServiceRequest struct {
+	UUID    string `json:"uuid"`
+	Message string `json:"message"`
+}
+
+func sendLog(uuid string, message string) {
+	request := logServiceRequest{uuid, message}
+	buf := new(bytes.Buffer)
+	json.NewEncoder(buf).Encode(request)
+	logReq, err := http.NewRequest(
+		http.MethodPost,
+		LOGGING_SERVICE_ENDPOINT,
+		buf,
+	)
+	if err != nil {
+		log.Error(err)
+		return
+	}
+	client := &http.Client{}
+	resp, err := client.Do(logReq)
+	if err != nil {
+		log.Error(err)
+		return
+	}
+	defer resp.Body.Close()
 }
 
 func main() {
