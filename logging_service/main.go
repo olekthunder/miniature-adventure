@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -30,11 +31,24 @@ func addLog(w http.ResponseWriter, r *http.Request) {
 	}
 	LOG_MAP[request.UUID] = request.Message
 	log.Info(request.Message)
+
+	w.WriteHeader(http.StatusOK)
+}
+
+func listLogs(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusOK)
+
+	for _, v := range LOG_MAP {
+		fmt.Fprintf(w, "%s\n", v)
+	}
 }
 
 func main() {
 	router := mux.NewRouter()
-	router.Path("/log/add").HandlerFunc(addLog).Methods(http.MethodPost)
+	logRouter := router.PathPrefix("/log").Subrouter()
+	logRouter.Path("/add").HandlerFunc(addLog).Methods(http.MethodPost)
+	logRouter.Path("/list").HandlerFunc(listLogs).Methods(http.MethodGet)
+
 
 	srv := &http.Server{
 		Handler:      router,
