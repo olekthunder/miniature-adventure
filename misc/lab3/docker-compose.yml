@@ -1,0 +1,28 @@
+version: "3"
+
+services:
+  hz1:
+    image: hazelcast/hazelcast:4.0.3
+  hz2:
+    image: hazelcast/hazelcast:4.0.3
+  hz3:
+    image: hazelcast/hazelcast:4.0.3
+
+  mgmt:
+    # image: hazelcast/management-center:4.2021.04
+    image: hazelcast/management-center:4.0.3
+    container_name: mgmt
+    ports:
+      - 8080:8080
+    # working_dir: /opt/hazelcast/management-center
+    environment:
+      - MC_HTTP_PORT=8080
+    command: "bash -c \"./mc-conf.sh cluster add -ma hz1:5701 -cn dev && ./start.sh\""
+    depends_on:
+      - hz1
+      - hz2
+      - hz3
+
+networks:
+  default:
+    name: "hznet"
