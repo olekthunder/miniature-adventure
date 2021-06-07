@@ -25,13 +25,13 @@ func main() {
 	if err := config.ClusterConfig.SetAddress(HZ_ADDRS...); err != nil {
 		log.Fatal(err)
 	}
+	// Create client
 	fmt.Println("Connecting...")
 	client, err := hazelcast.StartNewClientWithConfig(config)
 	if err != nil {
 		log.Fatal(err)
 	}
 	fmt.Println("Connected!")
-	// Retrieve a map.
 	mymap, err := client.GetMap("mymap")
 	if err != nil {
 		log.Fatal(err)
@@ -40,34 +40,72 @@ func main() {
 		mymap.Set(strconv.Itoa(i), i)
 	}
 
+	wg := new(sync.WaitGroup)
 	runIncrementWorkers := func(mapName string, incr incrFuncType) {
-		wg := new(sync.WaitGroup)
 		for i := 0; i < 3; i++ {
 			go createWorker(wg, config, i, mapName, incr)()
 		}
 		wg.Wait()
 	}
 
+	// Map increment with different lock types
 	runIncrementWorkers("pessimistic", incrementWithPessimisticLock)
 	printLine()
 	runIncrementWorkers("nolock", incrementMapValue)
 	printLine()
 	runIncrementWorkers("optimistic", incremeptWithOptimisticLock)
 
-	q, err := client.GetQueue("myqueue")
-	if err != nil {
-		log.Fatalln(err)
+	// Producer-consumer
+	queueName := "myqueue"
+	for i := 0; i < 10; i++ {
+		go createConsumer(wg, config, i, queueName)()
 	}
-	fmt.Println(q.Size())
-	for i := 0; i < 100; i++ {
-		if err := q.Put(i); err != nil {
-			log.Fatalln(err)
-		}
-	}
-	fmt.Println(q.Size())
-	// Stop the client once you are done with it.
+	produceToQueue(client, queueName, 100)
+	wg.Wait()
+
 	client.Shutdown()
 	fmt.Println("Shutdown.")
+}
+
+func produceToQueue(client *hazelcast.Client, queueName string, nValues int) {
+	q, err := client.GetQueue(queueName)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	for i := 0; i < nValues; i++ {
+		if err := q.Put(i); err != nil {
+			fmt.Println(err)
+			return
+		}
+		fmt.Printf("Produced %v\n", i)
+		time.Sleep(time.Millisecond * 100)
+	}
+}
+
+func createConsumer(wg *sync.WaitGroup, config hazelcast.Config, consumerIdx int, queueName string) func() {
+	wg.Add(1)
+	return func() {
+		fmt.Printf("Consumer %v start\n", consumerIdx)
+		defer wg.Done()
+		client, err := hazelcast.StartNewClientWithConfig(config)
+		if err != nil {
+			log.Fatal(err)
+		}
+		q, err := client.GetQueue(queueName)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		for {
+			if val, err := q.Take(); err == nil {
+				fmt.Printf("%v: consumed %v\n", consumerIdx, val)
+			} else {
+				fmt.Println(err)
+			}
+		}
+
+	}
 }
 
 func printLine() {
@@ -119,7 +157,7 @@ func incremeptWithOptimisticLock(m *hazelcast.Map, key string, workerIdx int) {
 			fmt.Println(reflect.TypeOf(val))
 			return
 		} else {
-			newVal := v+1
+			newVal := v + 1
 			fmt.Printf("%v: Trying to replace %v with %v\n", workerIdx, v, newVal)
 			replaced, err := m.ReplaceIfSame(key, v, newVal)
 			if err != nil {
