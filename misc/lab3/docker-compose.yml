@@ -15,14 +15,12 @@ services:
   hz3:
     <<: *hz
   mgmt:
-    # image: hazelcast/management-center:4.2021.04
     image: hazelcast/management-center:4.0.3
     ports:
       - 8080:8080
-    # working_dir: /opt/hazelcast/management-center
     environment:
       - MC_HTTP_PORT=8080  
-    command: "bash -c \"./mc-conf.sh cluster add -ma hz1:5701,hz2:5701,hz3:5701 -cn dev && ./start.sh\""
+    command: "bash -c \"./mc-conf.sh cluster add -ma hz1:5701,hz2:5701,hz3:5701 -cn dev && ./start.sh -v\""
     depends_on:
       - hz1
       - hz2
