@@ -1,13 +1,19 @@
 version: "3"
 
+x-hz: &hz
+  image: hazelcast/hazelcast:4.0.3
+  volumes: 
+    - .:/hz-config
+  environment:
+  - JAVA_OPTS="-Dhazelcast.config=/hz-config/hazelcast.xml"
+
 services:
   hz1:
-    image: hazelcast/hazelcast:4.0.3
+    <<: *hz
   hz2:
-    image: hazelcast/hazelcast:4.0.3
+    <<: *hz
   hz3:
-    image: hazelcast/hazelcast:4.0.3
-
+    <<: *hz
   mgmt:
     # image: hazelcast/management-center:4.2021.04
     image: hazelcast/management-center:4.0.3
@@ -15,8 +21,8 @@ services:
       - 8080:8080
     # working_dir: /opt/hazelcast/management-center
     environment:
-      - MC_HTTP_PORT=8080
-    command: "bash -c \"./mc-conf.sh cluster add -ma hz1:5701 -cn dev && ./start.sh\""
+      - MC_HTTP_PORT=8080  
+    command: "bash -c \"./mc-conf.sh cluster add -ma hz1:5701,hz2:5701,hz3:5701 -cn dev && ./start.sh\""
     depends_on:
       - hz1
       - hz2

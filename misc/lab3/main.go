@@ -54,6 +54,17 @@ func main() {
 	printLine()
 	runIncrementWorkers("optimistic", incremeptWithOptimisticLock)
 
+	q, err := client.GetQueue("myqueue")
+	if err != nil {
+		log.Fatalln(err)
+	}
+	fmt.Println(q.Size())
+	for i := 0; i < 100; i++ {
+		if err := q.Put(i); err != nil {
+			log.Fatalln(err)
+		}
+	}
+	fmt.Println(q.Size())
 	// Stop the client once you are done with it.
 	client.Shutdown()
 	fmt.Println("Shutdown.")
