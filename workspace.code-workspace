@@ -1,0 +1,17 @@
+{
+	"folders": [
+		{
+			"path": "misc/lab3"
+		},
+		{
+			"path": "logging_service"
+		},
+		{
+			"path": "facade_service"
+		},
+		{
+			"path": "messages_service"
+		}
+	],
+	"settings": {}
+}
