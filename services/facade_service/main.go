@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/google/uuid"
@@ -14,10 +15,11 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-// I don't want to parse configs for now
-const LOG_ADD_ENDPOINT = "http://localhost:8082/log/add"
-const LOG_LIST_ENDPOINT = "http://localhost:8082/log/list"
-const MESSAGES_ENDPOINT = "http://localhost:8083/"
+var LOGGING_SERVICE_ADDR = os.Getenv("LOGGING_SERVICE_ADDR")
+var MESSAGES_SERVICE_ADDR = os.Getenv("MESSAGES_SERVICE_ADDR")
+var LOG_ADD_ENDPOINT = fmt.Sprintf("http://%v/log/add", LOGGING_SERVICE_ADDR)
+var LOG_LIST_ENDPOINT = fmt.Sprintf("http://%v/log/list", LOGGING_SERVICE_ADDR)
+var MESSAGES_ENDPOINT = fmt.Sprintf("http://%v/", MESSAGES_SERVICE_ADDR)
 
 type addMessageRequest struct {
 	Message string
