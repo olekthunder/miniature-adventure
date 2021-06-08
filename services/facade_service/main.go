@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"math/rand"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -15,11 +17,15 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-var LOGGING_SERVICE_ADDR = os.Getenv("LOGGING_SERVICE_ADDR")
+var LOGGING_SERVICE_ADDRS = strings.Split(os.Getenv("LOGGING_SERVICE_ADDRS"), ",")
+const LOG_ADD_ENDPOINT = "http://%v/log/add"
+const LOG_LIST_ENDPOINT = "http://%v/log/list"
 var MESSAGES_SERVICE_ADDR = os.Getenv("MESSAGES_SERVICE_ADDR")
-var LOG_ADD_ENDPOINT = fmt.Sprintf("http://%v/log/add", LOGGING_SERVICE_ADDR)
-var LOG_LIST_ENDPOINT = fmt.Sprintf("http://%v/log/list", LOGGING_SERVICE_ADDR)
 var MESSAGES_ENDPOINT = fmt.Sprintf("http://%v/", MESSAGES_SERVICE_ADDR)
+
+func init() {
+	rand.Seed(time.Now().Unix())
+}
 
 type addMessageRequest struct {
 	Message string
@@ -59,9 +65,10 @@ func sendLog(uuid string, message string) {
 	request := logServiceRequest{uuid, message}
 	buf := new(bytes.Buffer)
 	json.NewEncoder(buf).Encode(request)
+	logAddEndpoint := getLogAddEndpoint()
 	logReq, err := http.NewRequest(
 		http.MethodPost,
-		LOG_ADD_ENDPOINT,
+		logAddEndpoint,
 		buf,
 	)
 	if err != nil {
@@ -69,6 +76,7 @@ func sendLog(uuid string, message string) {
 		return
 	}
 	client := &http.Client{}
+	log.Printf("Sending log to %v", logAddEndpoint)
 	resp, err := client.Do(logReq)
 	if err != nil {
 		log.Error(err)
@@ -83,8 +91,11 @@ func index(w http.ResponseWriter, r *http.Request) {
 		messageResponse string
 	}{}
 	g := errgroup.Group{}
+	logListEndpoint := getLogListEndpoint()
+	messagesEndpoint := MESSAGES_ENDPOINT
 	g.Go(func() error {
-		resp, err := http.Get(LOG_LIST_ENDPOINT)
+		log.Printf("Querying %v", logListEndpoint)
+		resp, err := http.Get(logListEndpoint)
 		if err != nil {
 			return err
 		}
@@ -97,7 +108,8 @@ func index(w http.ResponseWriter, r *http.Request) {
 		return nil
 	})
 	g.Go(func() error {
-		resp, err := http.Get(MESSAGES_ENDPOINT)
+		log.Printf("Querying %v", messagesEndpoint)
+		resp, err := http.Get(messagesEndpoint)
 		if err != nil {
 			return err
 		}
@@ -120,6 +132,18 @@ func index(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintln(w, data.messageResponse)
 	fmt.Fprintln(w, "Logs:")
 	fmt.Fprintln(w, data.logResponse)
+}
+
+func getLogServiceAddr() string {
+	return LOGGING_SERVICE_ADDRS[rand.Intn(len(LOGGING_SERVICE_ADDRS))]
+}
+
+func getLogListEndpoint() string {
+	return fmt.Sprintf(LOG_LIST_ENDPOINT, getLogServiceAddr())
+}
+
+func getLogAddEndpoint() string {
+	return fmt.Sprintf(LOG_ADD_ENDPOINT, getLogServiceAddr())
 }
 
 func main() {
