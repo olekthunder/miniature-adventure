@@ -1,16 +1,16 @@
 {
 	"folders": [
 		{
-			"path": "misc/lab3"
+			"path": "services/logging_service"
 		},
 		{
-			"path": "logging_service"
+			"path": "services/facade_service"
 		},
 		{
-			"path": "facade_service"
+			"path": "services/messages_service"
 		},
 		{
-			"path": "messages_service"
+			"path": "."
 		}
 	],
 	"settings": {}

@@ -20,7 +20,6 @@ services:
     <<: *hz
   mgmt:
     image: hazelcast/management-center:4.0.3
-    restart: always
     ports:
       - 8080:8080
     environment:
@@ -37,14 +36,20 @@ services:
     env_file: env.env
   logging_service1:
     <<: *x-logging_service
+    environment: 
+      - HAZELCAST_ADDR=hz1
     ports: 
       - 8182:8082
   logging_service2:
     <<: *x-logging_service
+    environment: 
+      - HAZELCAST_ADDR=hz2
     ports: 
       - 8282:8082
   logging_service3:
     <<: *x-logging_service
+    environment: 
+      - HAZELCAST_ADDR=hz3
     ports: 
       - 8382:8082
   facade_service:

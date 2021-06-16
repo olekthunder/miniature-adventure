@@ -1,24 +1,11 @@
 # Micro basics (KPI lab)
 
-IDK minimal go version, mine is 1.16
+Requires docker, docker-compose
 
 ## Running
 
 ```
-cd facade_service/
-go mod download
-go run main.go
-```
-
-```
-cd logging_service/
-go mod download
-go run main.go
-```
-
-```
-cd messages_service/
-go run main.go
+docker-compose up
 ```
 
 ## Example requests
@@ -31,7 +18,7 @@ go run main.go
 curl localhost:8081/message/add -X POST --data '{"message": "foobarspam"}'
 ```
 
-#### Index
+#### Index (list all logs and messages)
 ```
 curl localhost:8081/
 ```
@@ -55,5 +42,5 @@ curl localhost:8082/log/add -X POST --data '{"message": "foobar", "uuid": "anyst
 ### List logs
 
 ```
-curl localhost:8082/log/list
+curl localhost:8182/log/list
 ```
