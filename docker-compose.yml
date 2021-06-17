@@ -102,3 +102,18 @@ services:
     container_name: producer32
     depends_on:
       - rmq
+  # task 4
+  consumer4:
+    build:
+      context: consumer4
+      dockerfile: ../Dockerfile
+    container_name: consumer4
+    depends_on:
+      - rmq
+  producer4:
+    build:
+      context: producer4
+      dockerfile: ../Dockerfile
+    container_name: producer4
+    depends_on:
+      - rmq

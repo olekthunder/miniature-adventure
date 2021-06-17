@@ -8,7 +8,7 @@ import (
 	"github.com/streadway/amqp"
 )
 
-const EXCHANGE_NAME = "pub1"
+const Q_NAME = "tq4"
 
 func rmqConnect() *amqp.Connection {
 	for {
@@ -31,20 +31,21 @@ func main() {
 		log.Fatalln(err)
 	}
 	defer ch.Close()
-	err = ch.ExchangeDeclare(EXCHANGE_NAME, amqp.ExchangeFanout, false, false, false, false, nil)
+	_, err = ch.QueueDeclare(Q_NAME, true, false, false, false, nil)
 	if err != nil {
 		log.Fatalln(err)
 	}
 	for i := 0; i < 10; i++ {
 		msg := fmt.Sprintf("msg%v", i)
 		err = ch.Publish(
-			EXCHANGE_NAME,
 			"",
+			Q_NAME,
 			false,
 			false,
 			amqp.Publishing{
 				ContentType: "text/plain",
 				Body:        []byte(msg),
+				DeliveryMode: amqp.Persistent,
 			},
 		)
 		if err != nil {
@@ -52,5 +53,5 @@ func main() {
 		}
 		fmt.Printf("Published %v\n", msg)
 	}
-
+	
 }

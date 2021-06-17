@@ -15,7 +15,7 @@ func rmqConnect() *amqp.Connection {
 	for {
 		conn, err := amqp.Dial("amqp://guest:guest@rmq:5672/")
 		if err == nil {
-			fmt.Println("Successfully Connected to our RabbitMQ Instance")
+			fmt.Println("Connected to rmq")
 			return conn
 		} else {
 			fmt.Println("Failed to connect, retrying...")
