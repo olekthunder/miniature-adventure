@@ -1,0 +1,24 @@
+version: '3'
+
+services:
+  rmq:
+    image: rabbitmq:3-management
+    container_name: rmq
+    ports:
+      - 15672:15672
+      - 5672:5672
+  consumer1:
+    build:
+      context: consumer1
+      dockerfile: ../Dockerfile
+    container_name: consumer1
+    depends_on:
+      - rmq
+  producer1:
+    build:
+      context: producer1
+      dockerfile: ../Dockerfile
+    container_name: producer1
+    depends_on:
+      - rmq
+  
