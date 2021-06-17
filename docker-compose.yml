@@ -132,3 +132,25 @@ services:
     container_name: producer5
     depends_on:
       - rmq
+  # task 6
+  consumer6_ack:
+    build:
+      context: consumer6_ack
+      dockerfile: ../Dockerfile
+    container_name: consumer6_ack
+    depends_on:
+      - rmq
+  producer6:
+    build:
+      context: producer6
+      dockerfile: ../Dockerfile
+    container_name: producer6
+    depends_on:
+      - rmq
+  consumer6_no_ack:
+    build:
+      context: consumer6_no_ack
+      dockerfile: ../Dockerfile
+    container_name: consumer6_no_ack
+    depends_on:
+      - rmq
