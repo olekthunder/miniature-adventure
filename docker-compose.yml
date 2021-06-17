@@ -1,6 +1,6 @@
 version: '3'
 
-x-sub: &sub
+x-sub1: &sub1
   build:
     context: subscriber1
     dockerfile: ../Dockerfile
@@ -14,6 +14,7 @@ services:
     ports:
       - 15672:15672
       - 5672:5672
+  # task 1
   consumer1:
     build:
       context: consumer1
@@ -35,11 +36,26 @@ services:
     container_name: publisher1
     depends_on:
       - rmq
-      - subscriber1
-      - subscriber2
-  subscriber1:
-    <<: *sub
-    container_name: subscriber1
-  subscriber2:
-    <<: *sub
-    container_name: subscriber2
+      - subscriber11
+      - subscriber12
+  subscriber11:
+    <<: *sub1
+    container_name: subscriber11
+  subscriber12:
+    <<: *sub1
+    container_name: subscriber12
+  # task 2
+  client2:
+    build:
+      context: client2
+      dockerfile: ../Dockerfile
+    container_name: client2
+    depends_on:
+      - rmq
+  worker2:
+    build:
+      context: worker2
+      dockerfile: ../Dockerfile
+    container_name: worker2
+    depends_on:
+      - rmq
