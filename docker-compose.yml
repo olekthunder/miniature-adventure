@@ -117,3 +117,18 @@ services:
     container_name: producer4
     depends_on:
       - rmq
+  # task5
+  consumer5:
+    build:
+      context: consumer5
+      dockerfile: ../Dockerfile
+    container_name: consumer5
+    depends_on:
+      - rmq
+  producer5:
+    build:
+      context: producer5
+      dockerfile: ../Dockerfile
+    container_name: producer5
+    depends_on:
+      - rmq
