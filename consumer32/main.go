@@ -8,7 +8,7 @@ import (
 	"github.com/streadway/amqp"
 )
 
-const Q_NAME = "tq3"
+var Q_NAME = "tq32" 
 
 func rmqConnect() *amqp.Connection {
 	for {
@@ -32,26 +32,25 @@ func main() {
 		log.Fatalln(err)
 	}
 	defer ch.Close()
-	_, err = ch.QueueDeclare(Q_NAME, false, false, false, false, amqp.Table{"x-max-length": 5})
+	_, err = ch.QueueDeclare(Q_NAME, false, false, false, false, amqp.Table{"x-max-length": 5, "x-overflow": "reject-publish"})
 	if err != nil {
 		log.Fatalln(err)
 	}
-	for i := 0; i < 10; i++ {
-		msg := fmt.Sprintf("msg%v", i)
-		err = ch.Publish(
-			"",
+	for {
+		msgs, err := ch.Consume(
 			Q_NAME,
+			"",
+			true,
 			false,
 			false,
-			amqp.Publishing{
-				ContentType: "text/plain",
-				Body:        []byte(msg),
-			},
+			false,
+			nil,
 		)
 		if err != nil {
 			log.Fatalln(err)
 		}
-		fmt.Printf("Published %v\n", msg)
+		for m := range msgs {
+			fmt.Printf("Consumed %v\n", string(m.Body))
+		}
 	}
-	
 }

@@ -60,17 +60,45 @@ services:
     depends_on:
       - rmq
   # task 3
-  consumer3:
+  consumer31:
     build:
-      context: consumer3
+      context: consumer31
       dockerfile: ../Dockerfile
-    container_name: consumer3
+    container_name: consumer31
     depends_on:
       - rmq
-  producer3:
+  producer31:
     build:
-      context: producer3
+      context: producer31
       dockerfile: ../Dockerfile
-    container_name: producer3
+    container_name: producer31
+    depends_on:
+      - rmq
+    consumer31:
+    build:
+      context: consumer31
+      dockerfile: ../Dockerfile
+    container_name: consumer31
+    depends_on:
+      - rmq
+  producer31:
+    build:
+      context: producer31
+      dockerfile: ../Dockerfile
+    container_name: producer31
+    depends_on:
+      - rmq
+  consumer32:
+    build:
+      context: consumer32
+      dockerfile: ../Dockerfile
+    container_name: consumer32
+    depends_on:
+      - rmq
+  producer32:
+    build:
+      context: producer32
+      dockerfile: ../Dockerfile
+    container_name: producer32
     depends_on:
       - rmq
