@@ -59,3 +59,18 @@ services:
     container_name: worker2
     depends_on:
       - rmq
+  # task 3
+  consumer3:
+    build:
+      context: consumer3
+      dockerfile: ../Dockerfile
+    container_name: consumer3
+    depends_on:
+      - rmq
+  producer3:
+    build:
+      context: producer3
+      dockerfile: ../Dockerfile
+    container_name: producer3
+    depends_on:
+      - rmq
