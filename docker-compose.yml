@@ -29,11 +29,18 @@ services:
       - hz1
       - hz2
       - hz3
-  messages_service:
+  messages_service1:
     build: ./services/messages_service
     ports: 
-      - 8083:8083
-    env_file: env.env
+      - 8183:8083
+  messages_service2:
+    build: ./services/messages_service
+    ports: 
+      - 8283:8083
+  messages_service3:
+    build: ./services/messages_service
+    ports: 
+      - 8383:8083
   logging_service1:
     <<: *x-logging_service
     environment: 
@@ -57,6 +64,14 @@ services:
     ports: 
       - 8081:8081
     env_file: env.env
+    depends_on:
+      - rmq
+  rmq:
+    image: rabbitmq:3-management
+    container_name: rmq
+    ports:
+      - 15672:15672
+      - 5672:5672
       
 networks:
   default:
