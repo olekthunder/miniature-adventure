@@ -1,5 +1,12 @@
 version: '3'
 
+x-sub: &sub
+  build:
+    context: subscriber1
+    dockerfile: ../Dockerfile
+  depends_on:
+    - rmq
+
 services:
   rmq:
     image: rabbitmq:3-management
@@ -21,4 +28,18 @@ services:
     container_name: producer1
     depends_on:
       - rmq
-  
+  publisher1:
+    build:
+      context: publisher1
+      dockerfile: ../Dockerfile
+    container_name: publisher1
+    depends_on:
+      - rmq
+      - subscriber1
+      - subscriber2
+  subscriber1:
+    <<: *sub
+    container_name: subscriber1
+  subscriber2:
+    <<: *sub
+    container_name: subscriber2
