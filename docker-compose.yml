@@ -57,19 +57,19 @@ services:
   logging_service1:
     <<: *x-logging_service
     environment: 
-      - HAZELCAST_ADDR=hz1
+      - SERVICE_ID=logging_service_1
     ports: 
       - 8182:8082
   logging_service2:
     <<: *x-logging_service
     environment: 
-      - HAZELCAST_ADDR=hz2
+      - SERVICE_ID=logging_service_2
     ports: 
       - 8282:8082
   logging_service3:
     <<: *x-logging_service
     environment: 
-      - HAZELCAST_ADDR=hz3
+      - SERVICE_ID=logging_service_3
     ports: 
       - 8382:8082
 

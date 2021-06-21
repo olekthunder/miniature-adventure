@@ -1,3 +1,7 @@
 rabbit:
   url: amqp://guest:guest@rmq:5672/
   queue: message_queue
+hazelcast:
+  addr: hz1
+  cluster: dev
+  map: mymap

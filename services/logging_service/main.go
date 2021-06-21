@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
+	consul "github.com/hashicorp/consul/api"
 	"github.com/hazelcast/hazelcast-go-client"
 	"github.com/hazelcast/hazelcast-go-client/logger"
 	log "github.com/sirupsen/logrus"
@@ -23,24 +24,45 @@ func getEnvOrExit(name string) string {
 	}
 }
 
+func getConsulKVConfig(cli *consul.Client, name string) string {
+	val, _, err := cli.KV().Get(name, nil)
+	if err != nil {
+		log.Fatal(err)
+	}
+	if val == nil {
+		log.Fatalf("KV %v is missing", name)
+		return ""
+	}
+	return string(val.Value)
+}
+
 type appConfig struct {
-	hazelcastAddr string
+	hazelcastAddr        string
 	hazelcastClusterName string
-	port int
-	hazelcastMapName string
+	port                 int
+	hazelcastMapName     string
+	serviceID            string
+	serviceName          string
+	consulAddr           string
 }
 
 func newAppConfig() *appConfig {
 	cfg := new(appConfig)
-	cfg.hazelcastAddr = getEnvOrExit("HAZELCAST_ADDR")
-	cfg.hazelcastClusterName = getEnvOrExit("HAZELCAST_CLUSTER_NAME")
+	cfg.serviceID = getEnvOrExit("SERVICE_ID")
+	cfg.serviceName = getEnvOrExit("SERVICE_NAME")
+	cfg.consulAddr = getEnvOrExit("CONSUL_ADDR")
 	if port, err := strconv.Atoi(getEnvOrExit("PORT")); err != nil {
 		log.Fatalln(err)
 	} else {
 		cfg.port = port
 	}
-	cfg.hazelcastMapName = getEnvOrExit("HAZELCAST_MAP_NAME")
 	return cfg
+}
+
+func fillAppConfigWithConsulKV(cfg *appConfig, cli *consul.Client) {
+	cfg.hazelcastAddr = getConsulKVConfig(cli, "hazelcast/addr")
+	cfg.hazelcastClusterName = getConsulKVConfig(cli, "hazelcast/cluster")
+	cfg.hazelcastMapName = getConsulKVConfig(cli, "hazelcast/map")
 }
 
 type addLogRequest struct {
@@ -80,7 +102,7 @@ func newAddLogHandler(client *hazelcast.Client) *addLogHandler {
 
 type listLogsHandler struct {
 	client *hazelcast.Client
-	cfg *appConfig
+	cfg    *appConfig
 }
 
 func (l *listLogsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -122,14 +144,48 @@ func newHazelcastClient(cfg *appConfig) *hazelcast.Client {
 	return client
 }
 
+func healthCheck(w http.ResponseWriter, _ *http.Request) {
+	w.WriteHeader(http.StatusOK)
+}
+
+func initConsul(cfg *appConfig) *consul.Client {
+	config := consul.DefaultConfig()
+	config.Address = cfg.consulAddr
+	consulClient, err := consul.NewClient(config)
+	if err != nil {
+		log.Fatalln(err)
+	}
+
+	registration := new(consul.AgentServiceRegistration)
+
+	registration.ID = cfg.serviceID
+	registration.Name = cfg.serviceName
+	addr, err := os.Hostname()
+	if err != nil {
+		log.Fatalln(err)
+	}
+	registration.Address = addr
+	registration.Port = cfg.port
+	registration.Check = new(consul.AgentServiceCheck)
+	registration.Check.HTTP = fmt.Sprintf("http://%s:%v/health", addr, registration.Port)
+	registration.Check.Interval = "5s"
+	registration.Check.Timeout = "30s"
+	consulClient.Agent().ServiceRegister(registration)
+	log.Infof("Registered %v!", cfg.serviceName)
+	return consulClient
+}
+
 func main() {
 	cfg := newAppConfig()
+	consulClient := initConsul(cfg)
+	fillAppConfigWithConsulKV(cfg, consulClient)
 	client := newHazelcastClient(cfg)
 	defer func() {
 		client.Shutdown()
 		fmt.Println("Shutdown.")
 	}()
 	router := mux.NewRouter()
+	router.Path("/health").HandlerFunc(healthCheck)
 	logRouter := router.PathPrefix("/log").Subrouter()
 	addLogH := newAddLogHandler(client)
 	logRouter.Path("/add").Handler(addLogH).Methods(http.MethodPost)

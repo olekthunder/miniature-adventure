@@ -5,6 +5,10 @@ Requires docker, docker-compose
 ## Running
 
 ```
+docker-compose up consul-server consul-client init-consul
+```
+
+```
 docker-compose up
 ```
 
