@@ -18,6 +18,7 @@ services:
     <<: *hz
   hz3:
     <<: *hz
+
   mgmt:
     image: hazelcast/management-center:4.0.3
     ports:
@@ -29,6 +30,7 @@ services:
       - hz1
       - hz2
       - hz3
+
   messages_service1:
     build: ./services/messages_service
     ports: 
@@ -41,6 +43,7 @@ services:
     build: ./services/messages_service
     ports: 
       - 8383:8083
+
   logging_service1:
     <<: *x-logging_service
     environment: 
@@ -59,20 +62,45 @@ services:
       - HAZELCAST_ADDR=hz3
     ports: 
       - 8382:8082
+
   facade_service:
     build: ./services/facade_service
     ports: 
       - 8081:8081
-    env_file: env.env
+    env_file: facade.env
     depends_on:
       - rmq
+      - consul-server
+      - consul-client
+
   rmq:
     image: rabbitmq:3-management
     container_name: rmq
     ports:
       - 15672:15672
       - 5672:5672
-      
+
+  consul-server:
+    image: hashicorp/consul:1.9.3
+    container_name: consul-server
+    restart: always
+    volumes:
+      - ./server.json:/consul/config/server.json:ro
+    ports:
+      - "8500:8500"
+      - "8600:8600/tcp"
+      - "8600:8600/udp"
+    command: "agent"
+
+  consul-client:
+    image: hashicorp/consul:1.9.3
+    container_name: consul-client
+    restart: always
+    volumes:
+      - ./client.json:/consul/config/client.json:ro
+    command: "agent"
+    
+
 networks:
   default:
     name: "hznet"

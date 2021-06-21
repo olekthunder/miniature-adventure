@@ -9,6 +9,7 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/hazelcast/hazelcast-go-client"
+	"github.com/hazelcast/hazelcast-go-client/logger"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -81,6 +82,7 @@ func newHazelcastClient() *hazelcast.Client {
 	}
 	// Create client
 	fmt.Println("Connecting...")
+	config.LoggerConfig.Level = logger.OffLevel
 	client, err := hazelcast.StartNewClientWithConfig(config)
 	if err != nil {
 		log.Fatal(err)

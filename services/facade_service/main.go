@@ -8,11 +8,13 @@ import (
 	"math/rand"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
+	consul "github.com/hashicorp/consul/api"
 	log "github.com/sirupsen/logrus"
 	"github.com/streadway/amqp"
 	"golang.org/x/sync/errgroup"
@@ -21,13 +23,38 @@ import (
 var LOGGING_SERVICE_ADDRS = strings.Split(os.Getenv("LOGGING_SERVICE_ADDRS"), ",")
 const LOG_ADD_ENDPOINT = "http://%v/log/add"
 const LOG_LIST_ENDPOINT = "http://%v/log/list"
-var MESSAGES_SERVICE_ADDRS = []string{
-	"messages_service1:8083",
-	"messages_service2:8083",
-	"messages_service3:8083",
-}
-const Q_NAME = "message_queue"
+var MESSAGES_SERVICE_ADDRS = strings.Split(os.Getenv("MESSAGES_SERVICE_ADDRS"), ",")
 
+func getEnvOrExit(name string) string {
+	if val, ok := os.LookupEnv(name); ok {
+		return val
+	} else {
+		log.Fatalf("Env var %v is missing\n", name)
+		return "" // to suppress compiler errs
+	}
+}
+
+type appConfig struct {
+	port int
+	serviceID string
+	serviceName string
+	messageQueueName string
+	consulAddr string
+}
+
+func newAppConfig() *appConfig {
+	cfg := new(appConfig)
+	cfg.messageQueueName = getEnvOrExit("MESSAGE_QUEUE_NAME")
+	if port, err := strconv.Atoi(getEnvOrExit("PORT")); err != nil {
+		log.Fatalln(err)
+	} else {
+		cfg.port = port
+	}
+	cfg.serviceName = getEnvOrExit("SERVICE_NAME")
+	cfg.serviceID = getEnvOrExit("SERVICE_ID")
+	cfg.consulAddr = getEnvOrExit("CONSUL_ADDR")
+	return cfg
+}
 
 func init() {
 	rand.Seed(time.Now().Unix())
@@ -43,6 +70,7 @@ type addMessageResponse struct {
 
 type addMessageHandler struct {
 	ch *amqp.Channel
+	cfg *appConfig
 }
 
 func (amh *addMessageHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -61,7 +89,7 @@ func (amh *addMessageHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 	}).Debug("Got message")
 	err = amh.ch.Publish(
 		"",
-		Q_NAME,
+		amh.cfg.messageQueueName,
 		false,
 		false,
 		amqp.Publishing{
@@ -79,8 +107,8 @@ func (amh *addMessageHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 	w.WriteHeader(http.StatusOK)
 }
 
-func newAddMessageHandler(ch *amqp.Channel) *addMessageHandler {
-	return &addMessageHandler{ch: ch}
+func newAddMessageHandler(cfg *appConfig, ch *amqp.Channel) *addMessageHandler {
+	return &addMessageHandler{cfg: cfg, ch: ch}
 }
 
 type logServiceRequest struct {
@@ -194,7 +222,58 @@ func rmqConnect() *amqp.Connection {
 	}
 }
 
+func healthCheck(w http.ResponseWriter, _ *http.Request) {
+	w.WriteHeader(http.StatusOK)
+}
+
+func initConsul(cfg *appConfig) *consul.Client {
+	config := consul.DefaultConfig()
+	config.Address = cfg.consulAddr
+	consulClient, err := consul.NewClient(config)
+	if err != nil {
+		log.Fatalln(err)
+	}
+
+	registration := new(consul.AgentServiceRegistration)
+
+	registration.ID = cfg.serviceID
+	registration.Name = cfg.serviceName
+	addr, err := os.Hostname()
+	if err != nil {
+		log.Fatalln(err)
+	}
+	registration.Address = addr
+	registration.Port = cfg.port
+	registration.Check = new(consul.AgentServiceCheck)
+	registration.Check.HTTP = fmt.Sprintf("http://%s:%v/health", addr, registration.Port)
+	registration.Check.Interval = "5s"
+	registration.Check.Timeout = "30s"
+	consulClient.Agent().ServiceRegister(registration)
+	log.Infof("Registered %v!", cfg.serviceName)
+	return consulClient
+}
+
+func lookupService(consulClient *consul.Client, name string) (string, error) {
+	log.Infof("looking up %v", name)
+	time.Sleep(time.Second  * 30)
+	status, services, err := consulClient.Agent().AgentHealthServiceByName(name)
+	if err != nil {
+		log.Fatalln(err)
+	}
+	if status == consul.HealthCritical {
+		log.Fatalln("Status critical")
+	}
+	log.Infof("Found %v", name)
+	for _, srvc := range services {
+		log.Info(fmt.Sprintf("%v:%v", srvc.Service.Address, srvc.Service.Port))
+	}
+	return "", nil
+}
+
 func main() {
+	cfg := newAppConfig()
+	consulClient := initConsul(cfg)
+	go lookupService(consulClient, cfg.serviceName)
 	log.SetLevel(log.DebugLevel)
 	conn := rmqConnect()
 	defer conn.Close()
@@ -203,16 +282,18 @@ func main() {
 		log.Fatalln(err)
 	}
 	defer ch.Close()
-	addMessageH := newAddMessageHandler(ch)
+	addMessageH := newAddMessageHandler(cfg, ch)
 	router := mux.NewRouter()
 	router.Path("/").HandlerFunc(index).Methods(http.MethodGet)
 	router.Path("/message/add").Handler(addMessageH).Methods(http.MethodPost)
+	router.Path("/health").HandlerFunc(healthCheck).Methods(http.MethodGet)
 
 	srv := &http.Server{
 		Handler:      router,
-		Addr:         "0.0.0.0:8081",
+		Addr:         fmt.Sprintf("0.0.0.0:%v", cfg.port),
 		WriteTimeout: 15 * time.Second,
 		ReadTimeout:  15 * time.Second,
 	}
+	log.Info("Running server..")
 	log.Fatal(srv.ListenAndServe())
 }
