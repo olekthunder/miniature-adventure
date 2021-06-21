@@ -1,15 +1,23 @@
 {
 	"folders": [
 		{
+			"name": "logging_service",
 			"path": "services/logging_service"
 		},
 		{
+			"name": "facade_service",
 			"path": "services/facade_service"
 		},
 		{
+			"name": "messages_service",
 			"path": "services/messages_service"
 		},
 		{
+			"name": "init-consul",
+			"path": "misc/init-consul"
+		},
+		{
+			"name": "miniature-adventure",
 			"path": "."
 		}
 	],

@@ -21,8 +21,10 @@ import (
 )
 
 var LOGGING_SERVICE_ADDRS = strings.Split(os.Getenv("LOGGING_SERVICE_ADDRS"), ",")
+
 const LOG_ADD_ENDPOINT = "http://%v/log/add"
 const LOG_LIST_ENDPOINT = "http://%v/log/list"
+
 var MESSAGES_SERVICE_ADDRS = strings.Split(os.Getenv("MESSAGES_SERVICE_ADDRS"), ",")
 
 func getEnvOrExit(name string) string {
@@ -34,18 +36,29 @@ func getEnvOrExit(name string) string {
 	}
 }
 
-type appConfig struct {
-	port int
-	serviceID string
-	serviceName string
-	messageQueueName string
-	consulAddr string
-	rabbitURL string
+func getConsulKVConfig(cli *consul.Client, name string) string {
+	val, _, err := cli.KV().Get(name, nil)
+	if err != nil {
+		log.Fatal(err)
+	}
+	if val == nil {
+		log.Fatalf("KV %v is missing", name)
+		return ""
+	}
+	return string(val.Value)
 }
 
-func newAppConfig() *appConfig {
+type appConfig struct {
+	port             int
+	serviceID        string
+	serviceName      string
+	messageQueueName string
+	consulAddr       string
+	rabbitURL        string
+}
+
+func newAppConfigFromEnv() *appConfig {
 	cfg := new(appConfig)
-	cfg.messageQueueName = getEnvOrExit("MESSAGE_QUEUE_NAME")
 	if port, err := strconv.Atoi(getEnvOrExit("PORT")); err != nil {
 		log.Fatalln(err)
 	} else {
@@ -54,8 +67,12 @@ func newAppConfig() *appConfig {
 	cfg.serviceName = getEnvOrExit("SERVICE_NAME")
 	cfg.serviceID = getEnvOrExit("SERVICE_ID")
 	cfg.consulAddr = getEnvOrExit("CONSUL_ADDR")
-	cfg.rabbitURL = getEnvOrExit("RABBIT_URL")
 	return cfg
+}
+
+func fillAppConfigWithConsulKV(cfg *appConfig, cli *consul.Client) {
+	cfg.rabbitURL = getConsulKVConfig(cli, "rabbit/url")
+	cfg.messageQueueName = getConsulKVConfig(cli, "rabbit/queue")
 }
 
 func init() {
@@ -71,7 +88,7 @@ type addMessageResponse struct {
 }
 
 type addMessageHandler struct {
-	ch *amqp.Channel
+	ch  *amqp.Channel
 	cfg *appConfig
 }
 
@@ -257,7 +274,7 @@ func initConsul(cfg *appConfig) *consul.Client {
 
 func lookupService(consulClient *consul.Client, name string) (string, error) {
 	log.Infof("looking up %v", name)
-	time.Sleep(time.Second  * 30)
+	time.Sleep(time.Second * 30)
 	status, services, err := consulClient.Agent().AgentHealthServiceByName(name)
 	if err != nil {
 		log.Fatalln(err)
@@ -273,8 +290,9 @@ func lookupService(consulClient *consul.Client, name string) (string, error) {
 }
 
 func main() {
-	cfg := newAppConfig()
+	cfg := newAppConfigFromEnv()
 	consulClient := initConsul(cfg)
+	fillAppConfigWithConsulKV(cfg, consulClient)
 	go lookupService(consulClient, cfg.serviceName)
 	log.SetLevel(log.DebugLevel)
 	conn := rmqConnect(cfg)

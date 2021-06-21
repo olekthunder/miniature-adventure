@@ -73,6 +73,7 @@ services:
       - 8081:8081
     env_file: facade.env
     depends_on:
+      - init-consul
       - rmq
       - consul-server
       - consul-client
@@ -103,7 +104,14 @@ services:
     volumes:
       - ./client.json:/consul/config/client.json:ro
     command: "agent"
-    
+  
+  init-consul:
+    build: ./misc/init-consul
+    volumes:
+      - ./consul.yaml:/consul.yaml
+    environment: 
+      - CONSUL_HTTP_ADDR=consul-server:8500
+    command: "./main -f consul.yaml"
 
 networks:
   default:
