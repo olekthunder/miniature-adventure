@@ -9,7 +9,7 @@ x-hz: &hz
 
 x-logging_service: &x-logging_service
   build: ./services/logging_service
-  env_file: env.env
+  env_file: logging.env
 
 services:
   hz1:

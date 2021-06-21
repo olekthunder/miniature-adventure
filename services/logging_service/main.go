@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/gorilla/mux"
@@ -12,6 +13,35 @@ import (
 	"github.com/hazelcast/hazelcast-go-client/logger"
 	log "github.com/sirupsen/logrus"
 )
+
+func getEnvOrExit(name string) string {
+	if val, ok := os.LookupEnv(name); ok {
+		return val
+	} else {
+		log.Fatalf("Env var %v is missing\n", name)
+		return "" // to suppress compiler errs
+	}
+}
+
+type appConfig struct {
+	hazelcastAddr string
+	hazelcastClusterName string
+	port int
+	hazelcastMapName string
+}
+
+func newAppConfig() *appConfig {
+	cfg := new(appConfig)
+	cfg.hazelcastAddr = getEnvOrExit("HAZELCAST_ADDR")
+	cfg.hazelcastClusterName = getEnvOrExit("HAZELCAST_CLUSTER_NAME")
+	if port, err := strconv.Atoi(getEnvOrExit("PORT")); err != nil {
+		log.Fatalln(err)
+	} else {
+		cfg.port = port
+	}
+	cfg.hazelcastMapName = getEnvOrExit("HAZELCAST_MAP_NAME")
+	return cfg
+}
 
 type addLogRequest struct {
 	UUID    string `json:"uuid"`
@@ -50,10 +80,11 @@ func newAddLogHandler(client *hazelcast.Client) *addLogHandler {
 
 type listLogsHandler struct {
 	client *hazelcast.Client
+	cfg *appConfig
 }
 
 func (l *listLogsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	mymap, err := l.client.GetMap("mymap")
+	mymap, err := l.client.GetMap(l.cfg.hazelcastMapName)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -70,14 +101,14 @@ func (l *listLogsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(m)
 }
 
-func newListLogsHandler(client *hazelcast.Client) *listLogsHandler {
-	return &listLogsHandler{client: client}
+func newListLogsHandler(cfg *appConfig, client *hazelcast.Client) *listLogsHandler {
+	return &listLogsHandler{cfg: cfg, client: client}
 }
 
-func newHazelcastClient() *hazelcast.Client {
+func newHazelcastClient(cfg *appConfig) *hazelcast.Client {
 	config := hazelcast.NewConfig()
-	config.ClusterConfig.Name = "dev"
-	if err := config.ClusterConfig.SetAddress(os.Getenv("HAZELCAST_ADDR")); err != nil {
+	config.ClusterConfig.Name = cfg.hazelcastClusterName
+	if err := config.ClusterConfig.SetAddress(cfg.hazelcastAddr); err != nil {
 		log.Fatal(err)
 	}
 	// Create client
@@ -92,7 +123,8 @@ func newHazelcastClient() *hazelcast.Client {
 }
 
 func main() {
-	client := newHazelcastClient()
+	cfg := newAppConfig()
+	client := newHazelcastClient(cfg)
 	defer func() {
 		client.Shutdown()
 		fmt.Println("Shutdown.")
@@ -101,11 +133,11 @@ func main() {
 	logRouter := router.PathPrefix("/log").Subrouter()
 	addLogH := newAddLogHandler(client)
 	logRouter.Path("/add").Handler(addLogH).Methods(http.MethodPost)
-	listLogsH := newListLogsHandler(client)
+	listLogsH := newListLogsHandler(cfg, client)
 	logRouter.Path("/list").Handler(listLogsH).Methods(http.MethodGet)
 	srv := &http.Server{
 		Handler:      router,
-		Addr:         "0.0.0.0:8082",
+		Addr:         fmt.Sprintf("0.0.0.0:%v", cfg.port),
 		WriteTimeout: 15 * time.Second,
 		ReadTimeout:  15 * time.Second,
 	}
