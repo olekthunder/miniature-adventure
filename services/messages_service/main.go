@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
+	"strconv"
 	"time"
 
 	"github.com/gorilla/mux"
@@ -12,15 +14,43 @@ import (
 )
 
 const Q_NAME = "message_queue"
+
 var messages = []string{} // mutable global storage
+
+func getEnvOrExit(name string) string {
+	if val, ok := os.LookupEnv(name); ok {
+		return val
+	} else {
+		log.Fatalf("Env var %v is missing\n", name)
+		return "" // to suppress compiler errs
+	}
+}
+
+type appConfig struct {
+	port             int
+	messageQueueName string
+	rabbitURL        string
+}
+
+func newAppConfig() *appConfig {
+	cfg := new(appConfig)
+	cfg.messageQueueName = getEnvOrExit("MESSAGE_QUEUE_NAME")
+	if port, err := strconv.Atoi(getEnvOrExit("PORT")); err != nil {
+		log.Fatalln(err)
+	} else {
+		cfg.port = port
+	}
+	cfg.rabbitURL = getEnvOrExit("RABBIT_URL")
+	return cfg
+}
 
 func index(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(messages)
 }
 
-func rmqConnect() *amqp.Connection {
+func rmqConnect(cfg *appConfig) *amqp.Connection {
 	for {
-		conn, err := amqp.Dial("amqp://guest:guest@rmq:5672/")
+		conn, err := amqp.Dial(cfg.rabbitURL)
 		if err == nil {
 			fmt.Println("Connected to rmq")
 			return conn
@@ -31,15 +61,15 @@ func rmqConnect() *amqp.Connection {
 	}
 }
 
-func startConsumer(ch *amqp.Channel) {
-	_, err := ch.QueueDeclare(Q_NAME, false, false, false, false, nil)
+func startConsumer(cfg *appConfig, ch *amqp.Channel) {
+	_, err := ch.QueueDeclare(cfg.messageQueueName, false, false, false, false, nil)
 	if err != nil {
 		log.Fatalln(err)
 	}
 	for {
 		fmt.Println("Consuming...")
 		msgs, err := ch.Consume(
-			Q_NAME,
+			cfg.messageQueueName,
 			"",
 			true,
 			false,
@@ -59,18 +89,19 @@ func startConsumer(ch *amqp.Channel) {
 }
 
 func main() {
-	conn := rmqConnect()
+	cfg := newAppConfig()
+	conn := rmqConnect(cfg)
 	defer conn.Close()
 	ch, err := conn.Channel()
 	if err != nil {
 		log.Fatalln(err)
 	}
-	go startConsumer(ch)
+	go startConsumer(cfg, ch)
 	r := mux.NewRouter()
 	r.Path("/").HandlerFunc(index)
 	srv := &http.Server{
 		Handler: r,
-		Addr: "0.0.0.0:8083",
+		Addr:    fmt.Sprintf("0.0.0.0:%v", cfg.port),
 	}
 	log.Fatal(srv.ListenAndServe())
 }

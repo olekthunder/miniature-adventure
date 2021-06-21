@@ -11,6 +11,10 @@ x-logging_service: &x-logging_service
   build: ./services/logging_service
   env_file: logging.env
 
+x-messages_service: &x-messages_service
+  build: ./services/messages_service
+  env_file: messages.env
+
 services:
   hz1:
     <<: *hz
@@ -32,15 +36,15 @@ services:
       - hz3
 
   messages_service1:
-    build: ./services/messages_service
+    <<: *x-messages_service
     ports: 
       - 8183:8083
   messages_service2:
-    build: ./services/messages_service
+    <<: *x-messages_service
     ports: 
       - 8283:8083
   messages_service3:
-    build: ./services/messages_service
+    <<: *x-messages_service
     ports: 
       - 8383:8083
 
