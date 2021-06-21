@@ -90,6 +90,7 @@ type addMessageResponse struct {
 type addMessageHandler struct {
 	ch  *amqp.Channel
 	cfg *appConfig
+	client *consul.Client
 }
 
 func (amh *addMessageHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -121,13 +122,13 @@ func (amh *addMessageHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 	}
 	fmt.Printf("Published %v\n", request.Message)
 	// Don't wait for response
-	go sendLog(u, request.Message)
+	go sendLog(amh.client, u, request.Message)
 
 	w.WriteHeader(http.StatusOK)
 }
 
-func newAddMessageHandler(cfg *appConfig, ch *amqp.Channel) *addMessageHandler {
-	return &addMessageHandler{cfg: cfg, ch: ch}
+func newAddMessageHandler(client *consul.Client, cfg *appConfig, ch *amqp.Channel) *addMessageHandler {
+	return &addMessageHandler{client: client, cfg: cfg, ch: ch}
 }
 
 type logServiceRequest struct {
@@ -135,11 +136,11 @@ type logServiceRequest struct {
 	Message string `json:"message"`
 }
 
-func sendLog(uuid string, message string) {
+func sendLog(consulClient *consul.Client, uuid string, message string) {
 	request := logServiceRequest{uuid, message}
 	buf := new(bytes.Buffer)
 	json.NewEncoder(buf).Encode(request)
-	logAddEndpoint := getLogAddEndpoint()
+	logAddEndpoint := getLogAddEndpoint(consulClient)
 	logReq, err := http.NewRequest(
 		http.MethodPost,
 		logAddEndpoint,
@@ -159,14 +160,18 @@ func sendLog(uuid string, message string) {
 	defer resp.Body.Close()
 }
 
-func index(w http.ResponseWriter, r *http.Request) {
+type indexHandler struct {
+	client *consul.Client
+}
+
+func (ih *indexHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	data := struct {
 		logResponse     string
 		messageResponse string
 	}{}
 	g := errgroup.Group{}
-	logListEndpoint := getLogListEndpoint()
-	messagesEndpoint := getMessagesEndpoint()
+	logListEndpoint := getLogListEndpoint(ih.client)
+	messagesEndpoint := getMessagesEndpoint(ih.client)
 	g.Go(func() error {
 		log.Printf("Querying %v", logListEndpoint)
 		resp, err := http.Get(logListEndpoint)
@@ -208,24 +213,32 @@ func index(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintln(w, data.logResponse)
 }
 
-func getLogServiceAddr() string {
-	return LOGGING_SERVICE_ADDRS[rand.Intn(len(LOGGING_SERVICE_ADDRS))]
+func newIndexHandler(client *consul.Client) *indexHandler {
+	return &indexHandler{client: client}
 }
 
-func getLogListEndpoint() string {
-	return fmt.Sprintf(LOG_LIST_ENDPOINT, getLogServiceAddr())
+func randomAddr(addrs []string) string {
+	return addrs[rand.Intn(len(addrs))]
 }
 
-func getLogAddEndpoint() string {
-	return fmt.Sprintf(LOG_ADD_ENDPOINT, getLogServiceAddr())
+func getLogServiceAddr(client *consul.Client) string {
+	return randomAddr(lookupService(client, "logging_service"))
 }
 
-func getMessagesServiceAddr() string {
-	return MESSAGES_SERVICE_ADDRS[rand.Intn(len(MESSAGES_SERVICE_ADDRS))]
+func getLogListEndpoint(client *consul.Client) string {
+	return fmt.Sprintf(LOG_LIST_ENDPOINT, getLogServiceAddr(client))
 }
 
-func getMessagesEndpoint() string {
-	return fmt.Sprintf("http://%v/", getMessagesServiceAddr())
+func getLogAddEndpoint(client *consul.Client) string {
+	return fmt.Sprintf(LOG_ADD_ENDPOINT, getLogServiceAddr(client))
+}
+
+func getMessagesServiceAddr(client *consul.Client) string {
+	return randomAddr(lookupService(client, "messages_service"))
+}
+
+func getMessagesEndpoint(client *consul.Client) string {
+	return fmt.Sprintf("http://%v/", getMessagesServiceAddr(client))
 }
 
 func rmqConnect(cfg *appConfig) *amqp.Connection {
@@ -272,9 +285,8 @@ func initConsul(cfg *appConfig) *consul.Client {
 	return consulClient
 }
 
-func lookupService(consulClient *consul.Client, name string) (string, error) {
+func lookupService(consulClient *consul.Client, name string) []string {
 	log.Infof("looking up %v", name)
-	time.Sleep(time.Second * 30)
 	status, services, err := consulClient.Agent().AgentHealthServiceByName(name)
 	if err != nil {
 		log.Fatalln(err)
@@ -283,17 +295,20 @@ func lookupService(consulClient *consul.Client, name string) (string, error) {
 		log.Fatalln("Status critical")
 	}
 	log.Infof("Found %v", name)
+	serviceAddrs := []string{}
 	for _, srvc := range services {
-		log.Info(fmt.Sprintf("%v:%v", srvc.Service.Address, srvc.Service.Port))
+		serviceAddrs = append(
+			serviceAddrs,
+			fmt.Sprintf("%v:%v", srvc.Service.Address, srvc.Service.Port),
+		)
 	}
-	return "", nil
+	return serviceAddrs
 }
 
 func main() {
 	cfg := newAppConfigFromEnv()
 	consulClient := initConsul(cfg)
 	fillAppConfigWithConsulKV(cfg, consulClient)
-	go lookupService(consulClient, cfg.serviceName)
 	log.SetLevel(log.DebugLevel)
 	conn := rmqConnect(cfg)
 	defer conn.Close()
@@ -302,9 +317,10 @@ func main() {
 		log.Fatalln(err)
 	}
 	defer ch.Close()
-	addMessageH := newAddMessageHandler(cfg, ch)
+	addMessageH := newAddMessageHandler(consulClient, cfg, ch)
+	indexH := newIndexHandler(consulClient)
 	router := mux.NewRouter()
-	router.Path("/").HandlerFunc(index).Methods(http.MethodGet)
+	router.Path("/").Handler(indexH).Methods(http.MethodGet)
 	router.Path("/message/add").Handler(addMessageH).Methods(http.MethodPost)
 	router.Path("/health").HandlerFunc(healthCheck).Methods(http.MethodGet)
 
