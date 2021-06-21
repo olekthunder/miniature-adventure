@@ -81,7 +81,9 @@ services:
     depends_on:
       - init-consul
       - rmq
-      - consul-server
+      - consul-server1
+      - consul-server2
+      - consul-server3
       - consul-client
 
   rmq:
@@ -91,17 +93,35 @@ services:
       - 15672:15672
       - 5672:5672
 
-  consul-server:
+  consul-server1:
     image: hashicorp/consul:1.9.3
-    container_name: consul-server
+    container_name: consul-server1
     restart: always
     volumes:
-      - ./server.json:/consul/config/server.json:ro
+      - ./server1.json:/consul/config/server1.json:ro
     ports:
       - "8500:8500"
       - "8600:8600/tcp"
       - "8600:8600/udp"
-    command: "agent"
+    command: "agent -bootstrap-expect=3"
+  consul-server2:
+    image: hashicorp/consul:1.9.3
+    container_name: consul-server2
+    restart: always
+    ports:
+      - "8502:8500"
+    volumes:
+      - ./server2.json:/consul/config/server2.json:ro
+    command: "agent -bootstrap-expect=3"
+  consul-server3:
+    image: hashicorp/consul:1.9.3
+    container_name: consul-server3
+    restart: always
+    volumes:
+      - ./server3.json:/consul/config/server3.json:ro
+    ports:
+      - "8503:8500"
+    command: "agent -bootstrap-expect=3"
 
   consul-client:
     image: hashicorp/consul:1.9.3
@@ -116,7 +136,7 @@ services:
     volumes:
       - ./consul.yaml:/consul.yaml
     environment: 
-      - CONSUL_HTTP_ADDR=consul-server:8500
+      - CONSUL_HTTP_ADDR=consul-server1:8500
     command: "./main -f consul.yaml"
 
 networks:
