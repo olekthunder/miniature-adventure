@@ -40,6 +40,7 @@ type appConfig struct {
 	serviceName string
 	messageQueueName string
 	consulAddr string
+	rabbitURL string
 }
 
 func newAppConfig() *appConfig {
@@ -53,6 +54,7 @@ func newAppConfig() *appConfig {
 	cfg.serviceName = getEnvOrExit("SERVICE_NAME")
 	cfg.serviceID = getEnvOrExit("SERVICE_ID")
 	cfg.consulAddr = getEnvOrExit("CONSUL_ADDR")
+	cfg.rabbitURL = getEnvOrExit("RABBIT_URL")
 	return cfg
 }
 
@@ -209,9 +211,9 @@ func getMessagesEndpoint() string {
 	return fmt.Sprintf("http://%v/", getMessagesServiceAddr())
 }
 
-func rmqConnect() *amqp.Connection {
+func rmqConnect(cfg *appConfig) *amqp.Connection {
 	for {
-		conn, err := amqp.Dial("amqp://guest:guest@rmq:5672/")
+		conn, err := amqp.Dial(cfg.rabbitURL)
 		if err == nil {
 			fmt.Println("Connected to rmq")
 			return conn
@@ -275,7 +277,7 @@ func main() {
 	consulClient := initConsul(cfg)
 	go lookupService(consulClient, cfg.serviceName)
 	log.SetLevel(log.DebugLevel)
-	conn := rmqConnect()
+	conn := rmqConnect(cfg)
 	defer conn.Close()
 	ch, err := conn.Channel()
 	if err != nil {
