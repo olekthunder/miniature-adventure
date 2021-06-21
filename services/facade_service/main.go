@@ -52,8 +52,8 @@ type appConfig struct {
 	port             int
 	serviceID        string
 	serviceName      string
-	messageQueueName string
 	consulAddr       string
+	messageQueueName string
 	rabbitURL        string
 }
 
